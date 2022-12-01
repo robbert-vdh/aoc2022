@@ -3,12 +3,18 @@
 
 module Main where
 
+import Data.List (sortOn)
+import Data.Ord (Down (Down))
+
 main :: IO ()
 main = do
   !input <- parse <$> readFile "inputs/day-1.txt"
 
   putStrLn "Part 1:"
   print $! maximum (map sum input)
+
+  putStrLn "\nPart 2:"
+  print $! (sum . take 3 . sortOn Down . map sum) input
 
 parse :: String -> [[Int]]
 parse = map (map read) . splitOn "" . lines
