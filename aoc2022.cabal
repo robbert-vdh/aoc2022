@@ -25,3 +25,8 @@ executable day-1
     --       https://github.com/haskell/haskell-language-server/issues/2932
     hs-source-dirs:   app
     main-is:          Day1.hs
+
+executable day-2
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day2.hs
