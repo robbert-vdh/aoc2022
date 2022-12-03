@@ -37,3 +37,4 @@ executable day-3
     main-is:          Day3.hs
 
     build-depends:    containers ^>=0.6.6,
+                      split ^>=0.2.3.5,
