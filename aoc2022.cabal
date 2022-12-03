@@ -30,3 +30,10 @@ executable day-2
     import:           base
     hs-source-dirs:   app
     main-is:          Day2.hs
+
+executable day-3
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day3.hs
+
+    build-depends:    containers ^>=0.6.6,
