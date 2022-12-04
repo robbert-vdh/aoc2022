@@ -12,6 +12,9 @@ main = do
   putStrLn "Part 1:"
   print $! sum . map (\(l, r) -> fromEnum (symmetricalContains l r)) $ input
 
+  putStrLn "\nPart 2:"
+  print $! sum . map (\(l, r) -> fromEnum (overlap l r)) $ input
+
 -- * Part 1
 
 data Range = Range Int Int deriving (Show)
@@ -32,3 +35,8 @@ parse = map pLine . lines
 
     pRange (splitOn "-" -> [l, r]) = Range (read l) (read r)
     pRange _ = error "Invalid input format"
+
+-- * Part 2
+
+overlap :: Range -> Range -> Bool
+overlap (Range lx ly) (Range rx ry) = (rx <= ly && ly <= ry) || (lx <= ry && ry <= ly)
