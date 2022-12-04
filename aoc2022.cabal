@@ -38,3 +38,10 @@ executable day-3
 
     build-depends:    containers ^>=0.6.6,
                       split ^>=0.2.3.5,
+
+executable day-4
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day4.hs
+
+    build-depends:    split ^>=0.2.3.5,
