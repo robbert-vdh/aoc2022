@@ -17,6 +17,9 @@ main = do
   putStrLn "Part 1:"
   print $! map (head . snd) . M.toList $ run instructions state
 
+  putStrLn "\nPart 1:"
+  print $! map (head . snd) . M.toList $ runSequential instructions state
+
 -- * Part 1
 
 type Crate = Char
@@ -25,26 +28,30 @@ type Crate = Char
 type State = IntMap [Crate]
 
 data Instruction
-  = -- | An instruction to move a crate from the first column to the second one.
-    -- Instructions to move multiple crates one after the other have already
-    -- been unrolled.
-    Move Int Int
+  = -- | An instruction to move one or more crates from the first column to the
+    -- second one.
+    Move {moveN :: Int, moveSource :: Int, moveTarget :: Int}
   deriving (Show)
 
--- | Apply a list of instructions on the state
+-- | Apply a list of instructions on the state following the rules from part 1.
 run :: [Instruction] -> State -> State
-run [] s = s
-run (Move x y : is) s = run is (move x y s)
+run is s = foldl' (flip move) s is
 
--- | Move a single element from the first column to the second column. Diverges
--- if the source column is empty or the column doesn't exist in the satte.
-move :: Int -> Int -> State -> State
-move x y s =
-  let crate = head (s M.! x)
-      -- We can just pop 'crate' from the source column and push it to the
-      -- target column
-      s' = M.adjust tail x s
-   in M.adjust (crate :) y s'
+-- | Move one or more elements from the first column to the second column.
+-- Diverges if the source column is empty or the column doesn't exist in the
+-- state.
+--
+-- This now handles one or more moves. The part 1 version had the instructions
+-- list unrolled but part 2 requires the original move count number.
+move :: Instruction -> State -> State
+move (Move n x y) s = iterate move' s !! n
+  where
+    move' s' =
+      let crate = head (s' M.! x)
+          -- We can just pop 'crate' from the source column and push it to the
+          -- target column
+          s'' = M.adjust tail x s'
+       in M.adjust (crate :) y s''
 
 parse :: String -> (State, [Instruction])
 parse (lines -> input) =
@@ -101,13 +108,25 @@ transposeState = foldr insertStateRow M.empty
        in M.alter go column acc
 
 pInstructions :: Parser [Instruction]
-pInstructions = concat <$> sepEndBy pInstruction endOfLine <* eof
+pInstructions = sepEndBy pInstruction endOfLine <* eof
 
--- | This returns multiple instructions if @n@ is higher than 1 in @move n from
--- x to y@.
-pInstruction :: Parser [Instruction]
+pInstruction :: Parser Instruction
 pInstruction =
-  (\n x y -> replicate (read n) $ Move (read x) (read y))
+  (\n x y -> Move (read n) (read x) (read y))
     <$> (string "move " *> many1 digit)
     <*> (string " from " *> many1 digit)
     <*> (string " to " *> many1 digit)
+
+-- * Part 2
+
+-- | Apply a list of instructions on the state following the rules from part 2.
+runSequential :: [Instruction] -> State -> State
+runSequential is s = foldl' (flip moveSequential) s is
+
+-- | The same as 'move', but multiple elements are moved at the same time so the
+-- original order is preserved.
+moveSequential :: Instruction -> State -> State
+moveSequential (Move n x y) s =
+  let crates = take n (s M.! x)
+      s' = M.adjust (drop n) x s
+   in M.adjust (crates ++) y s'
