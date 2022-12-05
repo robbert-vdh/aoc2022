@@ -45,3 +45,11 @@ executable day-4
     main-is:          Day4.hs
 
     build-depends:    split ^>=0.2.3.5,
+
+executable day-5
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day5.hs
+
+    build-depends:    containers ^>=0.6.6,
+                      parsec ^>=3.1.15.1,
