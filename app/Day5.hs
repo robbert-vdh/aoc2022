@@ -44,14 +44,16 @@ run is s = foldl' (flip move) s is
 -- This now handles one or more moves. The part 1 version had the instructions
 -- list unrolled but part 2 requires the original move count number.
 move :: Instruction -> State -> State
-move (Move n x y) s = iterate move' s !! n
-  where
-    move' s' =
-      let crate = head (s' M.! x)
-          -- We can just pop 'crate' from the source column and push it to the
-          -- target column
-          s'' = M.adjust tail x s'
-       in M.adjust (crate :) y s''
+move (Move n x y) s = iterate (moveSingle x y) s !! n
+
+-- | Move a single crate from source column x to target column y.
+moveSingle :: Int -> Int -> State -> State
+moveSingle x y s =
+  let crate = head (s M.! x)
+      -- We can just pop 'crate' from the source column and push it to the
+      -- target column
+      s' = M.adjust tail x s
+   in M.adjust (crate :) y s'
 
 parse :: String -> (State, [Instruction])
 parse (lines -> input) =
