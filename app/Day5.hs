@@ -15,8 +15,7 @@ main = do
   (!state, !instructions) <- parse <$> readFile "inputs/day-5.txt"
 
   putStrLn "Part 1:"
-  print state
-  print instructions
+  print $! map (head . snd) . M.toList $ run instructions state
 
 -- * Part 1
 
@@ -31,6 +30,21 @@ data Instruction
     -- been unrolled.
     Move Int Int
   deriving (Show)
+
+-- | Apply a list of instructions on the state
+run :: [Instruction] -> State -> State
+run [] s = s
+run (Move x y : is) s = run is (move x y s)
+
+-- | Move a single element from the first column to the second column. Diverges
+-- if the source column is empty or the column doesn't exist in the satte.
+move :: Int -> Int -> State -> State
+move x y s =
+  let crate = head (s M.! x)
+      -- We can just pop 'crate' from the source column and push it to the
+      -- target column
+      s' = M.adjust tail x s
+   in M.adjust (crate :) y s'
 
 parse :: String -> (State, [Instruction])
 parse (lines -> input) =
