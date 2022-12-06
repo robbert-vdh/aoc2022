@@ -2,12 +2,17 @@
 
 module Main where
 
+import Data.List (nub)
+
 main :: IO ()
 main = do
   !input <- readFile "inputs/day-6.txt"
 
   putStrLn "Part 1:"
   print $! packetEndPos input
+
+  putStrLn "\nPart 1:"
+  print $! packetStartPos input
 
 -- * Part 1
 
@@ -23,3 +28,18 @@ packetEndPos = go 4
           Just n
       | otherwise = go (n + 1) (y : z : w : xs)
     go _ _ = Nothing
+
+-- * Part 2
+
+-- | The same as 'packetEndPos', but for a 14 element sequence.
+packetStartPos :: String -> Maybe Int
+packetStartPos = go 14
+  where
+    -- This could be a whole load more efficient using Vectors, HashSets, and/or
+    -- some simple dynamic programming, but I didn't feel like adding more
+    -- libraries and for the test case this is more than fast enough.
+    go :: Int -> String -> Maybe Int
+    go _ [] = Nothing
+    go n xs = case take 14 xs of
+      seg | length seg == 14 && length (nub seg) == 14 -> Just n
+      _ -> go (n + 1) (tail xs)
