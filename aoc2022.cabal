@@ -58,3 +58,11 @@ executable day-6
     import:           base
     hs-source-dirs:   app
     main-is:          Day6.hs
+
+executable day-7
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day7.hs
+
+    build-depends:    parsec ^>=3.1.15.1,
+                      unordered-containers ^>=0.2.19.1,
