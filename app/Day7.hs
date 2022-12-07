@@ -13,7 +13,11 @@ main :: IO ()
 main = do
   !input <- parse <$> readFile "inputs/day-7.txt"
 
+  putStrLn "Part 1:"
   print $! sumLargeDirs input
+
+  putStrLn "\nPart 2:"
+  print $! findRemovalCandidate input
 
 -- * Part 1
 
@@ -28,17 +32,20 @@ data FileSystemNode
 -- | Return the total size of all directories with a total size of at most
 -- 100000 (the same file may be counted multiple times).
 sumLargeDirs :: DirectoryListing -> Int
-sumLargeDirs dir =
+sumLargeDirs = sum . filter (<= 100000) . dirSizes
+
+-- | Recursively compute the total size of this directory and all of its
+-- descendent directories.
+dirSizes :: DirectoryListing -> [Int]
+dirSizes dir =
+  -- This top-down approach is super inefficient but it's fast enough so may as
+  -- well
   let !size = dirSize dir
-      -- Only directories with a total size less than or equal to 100000 should be counted
-      countedSize = if size <= 100000 then size else 0
-   in -- This top-down approach is super inefficient but it's fast enough so may
-      -- as well
-      countedSize + sum (map go $ toList dir)
+   in size : concatMap go (toList dir)
   where
     -- Files shouldn't contribute on their own
-    go (File _) = 0
-    go (Dir subdir) = part1 subdir
+    go (File _) = []
+    go (Dir subdir) = dirSizes subdir
 
 -- | Get the total size of a directory. This is super inefficient, but since
 -- it's fast enough may as well.
@@ -141,3 +148,21 @@ mergeDirs = M.foldlWithKey' insertNode
 -- | Wrap a directory listing in a parent directory.
 addParentDir :: DirectoryListing -> String -> DirectoryListing
 addParentDir m name = M.singleton name (Dir m)
+
+-- * Part 2
+
+totalDiskSpace, requiredDiskSpace :: Int
+totalDiskSpace = 70000000
+requiredDiskSpace = 30000000
+
+-- | Find the smallest directory which when removed, brings the available disk
+-- space up to 30000000, and returns its size.
+findRemovalCandidate :: DirectoryListing -> Maybe Int
+findRemovalCandidate dir =
+  let usedDiskSpace = dirSize dir
+      freeDiskSpace = totalDiskSpace - usedDiskSpace
+      minDirSize = max 0 (requiredDiskSpace - freeDiskSpace)
+      candidates = filter (>= minDirSize) (dirSizes dir)
+   in if null candidates
+        then Nothing
+        else Just (minimum candidates)
