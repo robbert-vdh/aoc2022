@@ -13,7 +13,7 @@ main :: IO ()
 main = do
   !input <- parse <$> readFile "inputs/day-7.txt"
 
-  print input
+  print $! sumLargeDirs input
 
 -- * Part 1
 
@@ -24,6 +24,30 @@ data FileSystemNode
   | -- | A directory possibly containing other named files and directories.
     Dir DirectoryListing
   deriving (Show)
+
+-- | Return the total size of all directories with a total size of at most
+-- 100000 (the same file may be counted multiple times).
+sumLargeDirs :: DirectoryListing -> Int
+sumLargeDirs dir =
+  let !size = dirSize dir
+      -- Only directories with a total size less than or equal to 100000 should be counted
+      countedSize = if size <= 100000 then size else 0
+   in -- This top-down approach is super inefficient but it's fast enough so may
+      -- as well
+      countedSize + sum (map go $ toList dir)
+  where
+    -- Files shouldn't contribute on their own
+    go (File _) = 0
+    go (Dir subdir) = part1 subdir
+
+-- | Get the total size of a directory. This is super inefficient, but since
+-- it's fast enough may as well.
+dirSize :: DirectoryListing -> Int
+dirSize = sum . map fileSystemNodeSize . toList
+
+fileSystemNodeSize :: FileSystemNode -> Int
+fileSystemNodeSize (File size) = size
+fileSystemNodeSize (Dir dir) = dirSize dir
 
 -- ** Parsing
 
