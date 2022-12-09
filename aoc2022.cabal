@@ -73,3 +73,8 @@ executable day-8
     main-is:          Day8.hs
 
     build-depends:    massiv ^>=1.0.2.0,
+
+executable day-9
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day9.hs
