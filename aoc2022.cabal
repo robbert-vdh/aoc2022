@@ -89,3 +89,4 @@ executable day-10
     main-is:          Day10.hs
 
     build-depends:    mtl ^>=2.3.1,
+                      split ^>=0.2.3.5,

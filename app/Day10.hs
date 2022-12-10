@@ -2,7 +2,9 @@
 
 module Main where
 
+import Control.Monad
 import Control.Monad.State.Strict
+import Data.List.Split (chunksOf)
 import Data.Maybe (mapMaybe)
 
 main :: IO ()
@@ -12,6 +14,13 @@ main = do
   putStrLn "Part 1:"
   let !xs = evalState (run input) initialState
   print $! sum $! signalStrengths xs
+
+  putStrLn "\nPart 2:"
+  let litPixels = isLit xs
+      pixelChar True = '#'
+      pixelChar False = ' '
+  forM_ (chunksOf 40 litPixels) $ \row -> do
+    putStrLn $! map pixelChar row
 
 -- * Part 1
 
@@ -149,3 +158,15 @@ parse = map (pInstr . words) . lines
     pInstr ["addx", n] = AddX (read n)
     pInstr ["noop"] = Noop
     pInstr xs = error $ "Invalid input: " <> show xs
+
+-- * Part 2
+
+-- | For each value of the x register, determine if it would cause the CRT
+-- screen to light up. A value of @n@ means that horizontal pixels @n - 1@, @n@,
+-- and @n + 1@ will be lit. The CRT keeps scanning in horizontal lines from
+-- @[0..39]@, so when these coordinates match up the pixel will be lit.
+isLit :: [Int] -> [Bool]
+isLit xs = zipWith isLit' xs (cycle [1 .. 40])
+  where
+    isLit' :: Int -> Int -> Bool
+    isLit' spriteX crtX = spriteX - 1 <= crtX && crtX <= spriteX + 1
