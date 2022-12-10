@@ -82,3 +82,10 @@ executable day-9
     build-depends:    mtl ^>=2.3.1,
                       unordered-containers ^>=0.2.19.1,
                       vector ^>=0.13.0.0,
+
+executable day-10
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day10.hs
+
+    build-depends:    mtl ^>=2.3.1,
