@@ -90,3 +90,10 @@ executable day-10
 
     build-depends:    mtl ^>=2.3.1,
                       split ^>=0.2.3.5,
+
+executable day-11
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day11.hs
+
+    build-depends:    megaparsec ^>=9.3.0,
