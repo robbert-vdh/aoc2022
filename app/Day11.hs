@@ -19,8 +19,12 @@ main = do
   !input <- parse <$> readFile "inputs/day-11.txt"
 
   putStrLn "Part 1:"
-  let !result = execState (replicateM_ 20 processRound) input
-  print $! monkeyBusiness result
+  let !p1Result = execState (replicateM_ 20 (processRound True)) input
+  print $! monkeyBusiness p1Result
+
+  putStrLn "\nPart 2:"
+  let !p2Result = execState (replicateM_ 10000 (processRound False)) input
+  print $! monkeyBusiness p2Result
 
 -- * Part 1
 
@@ -39,12 +43,12 @@ data Monkey = Monkey
 
 -- | For every item the monkey holds the item's value (worry level) is
 -- manipulated according to this operation.
-data Operation = OpAdd Int | OpMul Int | OpSquare deriving (Show)
+data Operation = OpAdd Item | OpMul Item | OpSquare deriving (Show)
 
 -- | If the value is divisible by the first integer, then the item is thrown to
 -- the monkey with the second integer's index. Otherwise the item is thrown to
 -- the monkey with the last integer's index.
-data Test = DivisibleBy Int Int Int deriving (Show)
+data Test = DivisibleBy Item Int Int deriving (Show)
 
 type MonkeyState a = State (Vector Monkey) a
 
@@ -54,10 +58,16 @@ monkeyBusiness = product . take 2 . sortOn Down . map itemsInspected . V.toList
 
 -- | Process an entire round of the monkey business. All monkeys inspect and
 -- throw items in sequence, starting with the monkey with index 0.
-processRound :: MonkeyState ()
-processRound = do
+--
+-- The division by three only happens if @shouldDivide@ is true.
+processRound :: Bool -> MonkeyState ()
+processRound shouldDivide = do
   n <- gets V.length
-  mapM_ processMonkey [0 .. n - 1]
+  mapM_ (processMonkey shouldDivide) [0 .. n - 1]
+
+  -- Dividing each value by the product of all test values keeps the worry
+  -- levels manageable
+  unless shouldDivide doModLcm
 
 -- | Process all operations for the monkey with the given index as described in
 -- the puzzle. If the index is out of bounds for the monkeys vector this
@@ -65,13 +75,13 @@ processRound = do
 -- the item's worry level according to the operation, divides the new worry
 -- level by three, passes the item to another monkey based on the test, and then
 -- increases the number of items handled by 1.
-processMonkey :: Int -> MonkeyState ()
-processMonkey idx = do
+processMonkey :: Bool -> Int -> MonkeyState ()
+processMonkey shouldDivide idx = do
   monkey@Monkey {items, itemsInspected, operation, test} <- gets (V.! idx)
   let numItems = length items
       -- Every item's worry level changes and is then thrown to another monkey.
       -- This yields a list of `(newMonkeyIdx, newWorryLevel)` pairs
-      thrownItems = map (throwItem operation test) items
+      thrownItems = map (throwItem shouldDivide operation test) items
 
   -- The monkey has inspected all of its items and passed them to other monkeys
   -- NOTE: This is an invariant on the input that should always be true, so
@@ -89,19 +99,24 @@ addItem newIdx newItem = do
 
 -- | Based on the operation and test, update an item's worry level and determine
 -- which monkey it should be thrown at.
-throwItem :: Operation -> Test -> Item -> (Int, Item)
-throwItem op (DivisibleBy n l r) worry =
-  let worry' = updateWorry op worry
+throwItem :: Bool -> Operation -> Test -> Item -> (Int, Item)
+throwItem shouldDivide op (DivisibleBy n l r) worry =
+  let worry' = updateWorry shouldDivide op worry
    in if (worry' `rem` n) == 0
         then (l, worry')
         else (r, worry')
 
 -- | Update an item's worry level by applying the operation and then dividing
 -- the result by 3 (because the monkey didn't destroy the item).
-updateWorry :: Operation -> Item -> Item
-updateWorry (OpAdd x) worry = (worry + x) `div` 3
-updateWorry (OpMul x) worry = (worry * x) `div` 3
-updateWorry OpSquare worry = (worry * worry) `div` 3
+updateWorry :: Bool -> Operation -> Item -> Item
+updateWorry shouldDivide op worry =
+  let worry' = case op of
+        OpAdd x -> worry + x
+        OpMul x -> worry * x
+        OpSquare -> worry * worry
+   in if shouldDivide
+        then worry' `div` 3
+        else worry'
 
 -- ** Parsing
 
@@ -136,23 +151,38 @@ pMonkey =
     pInt :: Parser Int
     pInt = read <$> some digitChar
 
+    pItem :: Parser Item
+    pItem = read <$> some digitChar
+
     pMonkeyIndex :: Parser Int
     pMonkeyIndex = string "Monkey " *> pInt <* char ':' <* eol
 
-    pStartingItems :: Parser [Int]
-    pStartingItems = string "  Starting items: " *> sepBy pInt (string ", ") <* eol
+    pStartingItems :: Parser [Item]
+    pStartingItems = string "  Starting items: " *> sepBy pItem (string ", ") <* eol
 
     pOperation, pOpAdd, pOpMulSquare, pOpMul, pOpSquare :: Parser Operation
     pOperation = string "  Operation: new = old " *> (pOpAdd <|> pOpMulSquare) <* eol
-    pOpAdd = OpAdd <$> (string "+ " *> pInt)
+    pOpAdd = OpAdd <$> (string "+ " *> pItem)
     -- Mul and square share a prefix, so if we parse it like this we don't need backtracking
     pOpMulSquare = string "* " *> (pOpMul <|> pOpSquare)
-    pOpMul = OpMul <$> pInt
+    pOpMul = OpMul <$> pItem
     pOpSquare = OpSquare <$ string "old"
 
     pTest :: Parser Test
     pTest =
       DivisibleBy
-        <$> (string "  Test: divisible by " *> pInt <* eol)
+        <$> (string "  Test: divisible by " *> pItem <* eol)
         <*> (string "    If true: throw to monkey " *> pInt <* eol)
         <*> (string "    If false: throw to monkey " *> pInt <* eol)
+
+-- * Part 2
+
+-- | Compute the least common multiple of all worry levels and replace all worry
+-- levels by `x % lcm` to avoid the values from growing too large.
+doModLcm :: MonkeyState ()
+doModLcm = do
+  lcm' <- product <$> gets (V.map (testValue . test))
+  modify' $ V.map (\monkey -> monkey {items = map (`rem` lcm') (items monkey)})
+
+  where
+    testValue (DivisibleBy n _ _) = n
