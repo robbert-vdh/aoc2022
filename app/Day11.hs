@@ -1,19 +1,26 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Main where
 
+import Control.Monad
+import Control.Monad.State.Strict
 import Data.List (sortOn)
-import Text.Megaparsec hiding (parse)
+import Data.Ord (Down (Down))
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+import Data.Void (Void)
+import Text.Megaparsec hiding (State, parse)
 import qualified Text.Megaparsec as Parsec
 import Text.Megaparsec.Char
-import Data.Void (Void)
 
 main :: IO ()
 main = do
   !input <- parse <$> readFile "inputs/day-11.txt"
 
   putStrLn "Part 1:"
-  print input
+  let !result = execState (replicateM_ 20 processRound) input
+  print $! monkeyBusiness result
 
 -- * Part 1
 
@@ -39,12 +46,69 @@ data Operation = OpAdd Int | OpMul Int | OpSquare deriving (Show)
 -- the monkey with the last integer's index.
 data Test = DivisibleBy Int Int Int deriving (Show)
 
+type MonkeyState a = State (Vector Monkey) a
+
+-- | Compute the product of the two highest 'itemsInspected' values.
+monkeyBusiness :: Vector Monkey -> Int
+monkeyBusiness = product . take 2 . sortOn Down . map itemsInspected . V.toList
+
+-- | Process an entire round of the monkey business. All monkeys inspect and
+-- throw items in sequence, starting with the monkey with index 0.
+processRound :: MonkeyState ()
+processRound = do
+  n <- gets V.length
+  mapM_ processMonkey [0 .. n - 1]
+
+-- | Process all operations for the monkey with the given index as described in
+-- the puzzle. If the index is out of bounds for the monkeys vector this
+-- diverges. For every item the monkey currently possesses, it first modifies
+-- the item's worry level according to the operation, divides the new worry
+-- level by three, passes the item to another monkey based on the test, and then
+-- increases the number of items handled by 1.
+processMonkey :: Int -> MonkeyState ()
+processMonkey idx = do
+  monkey@Monkey {items, itemsInspected, operation, test} <- gets (V.! idx)
+  let numItems = length items
+      -- Every item's worry level changes and is then thrown to another monkey.
+      -- This yields a list of `(newMonkeyIdx, newWorryLevel)` pairs
+      thrownItems = map (throwItem operation test) items
+
+  -- The monkey has inspected all of its items and passed them to other monkeys
+  -- NOTE: This is an invariant on the input that should always be true, so
+  --       we'll just assume it is
+  modify' (V.// [(idx, monkey {items = [], itemsInspected = itemsInspected + numItems})])
+
+  -- The thrown items now need to be added to their new rightful owners
+  mapM_ (uncurry addItem) thrownItems
+
+-- | Add an item to the monkey with the given index.
+addItem :: Int -> Item -> MonkeyState ()
+addItem newIdx newItem = do
+  newMonkey@Monkey {items} <- gets (V.! newIdx)
+  modify' (V.// [(newIdx, newMonkey {items = newItem : items})])
+
+-- | Based on the operation and test, update an item's worry level and determine
+-- which monkey it should be thrown at.
+throwItem :: Operation -> Test -> Item -> (Int, Item)
+throwItem op (DivisibleBy n l r) worry =
+  let worry' = updateWorry op worry
+   in if (worry' `rem` n) == 0
+        then (l, worry')
+        else (r, worry')
+
+-- | Update an item's worry level by applying the operation and then dividing
+-- the result by 3 (because the monkey didn't destroy the item).
+updateWorry :: Operation -> Item -> Item
+updateWorry (OpAdd x) worry = (worry + x) `div` 3
+updateWorry (OpMul x) worry = (worry * x) `div` 3
+updateWorry OpSquare worry = (worry * worry) `div` 3
+
 -- ** Parsing
 
 type Parser = Parsec Void String
 
-parse :: String -> [Monkey]
-parse = fromRight' . Parsec.parse go "input"
+parse :: String -> Vector Monkey
+parse = V.fromList . fromRight' . Parsec.parse go "input"
   where
     go :: Parser [Monkey]
     go = getMonkeys . sortOn fst <$> sepEndBy pMonkey eol
