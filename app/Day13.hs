@@ -2,6 +2,7 @@
 
 module Main where
 
+import Data.List
 import Data.Void
 import Text.Megaparsec hiding (parse)
 import qualified Text.Megaparsec as Parsec
@@ -14,13 +15,16 @@ main = do
   putStrLn "Part 1:"
   print $! score $ map (uncurry verifyOrder) input
 
+  putStrLn "\nPart 2:"
+  print $! decoderKey . sortPackets . addDividers . concatPackets $ input
+
 -- * Part 1
 
-data Packet = PacketInt Int | PacketList [Packet] deriving (Show)
+data Packet = PacketInt Int | PacketList [Packet] deriving (Show, Eq)
 
 -- | Determine the final part 1 score for a list of 'verifyOrder' results
 score :: [Bool] -> Int
-score = sum . zipWith (\idx result -> if result then idx else 0) [1..]
+score = sum . zipWith (\idx result -> if result then idx else 0) [1 ..]
 
 -- | Check whether the two packets are in the correct order according to the
 -- bizarre rules from the puzzle.
@@ -69,3 +73,29 @@ pPacketList = PacketList <$> between (char '[') (char ']') (sepBy pPacket (char 
 
 pPacketInt :: Parser Packet
 pPacketInt = PacketInt . read <$> some digitChar
+
+-- * Part 2
+
+-- | Concatenate the list of packet pairs. Doesn't insert the dividers yet.
+concatPackets :: [(Packet, Packet)] -> [Packet]
+concatPackets = concatMap (\(l, r) -> [l, r])
+
+addDividers :: [Packet] -> [Packet]
+addDividers ps = dividerPacket1 : dividerPacket2 : ps
+
+sortPackets :: [Packet] -> [Packet]
+sortPackets = sortBy $ \l r -> if verifyOrder l r then LT else GT
+
+decoderKey :: [Packet] -> Maybe Int
+decoderKey xs
+  | Just p1 <- elemIndex dividerPacket1 xs
+  , Just p2 <- elemIndex dividerPacket2 xs =
+      -- The indices in the puzzle are one-based
+      Just $ (p1 + 1) * (p2 + 1)
+decoderKey _ = Nothing
+
+dividerPacket1 :: Packet
+dividerPacket1 = PacketList [PacketList [PacketInt 2]]
+
+dividerPacket2 :: Packet
+dividerPacket2 = PacketList [PacketList [PacketInt 6]]
