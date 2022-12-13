@@ -110,3 +110,10 @@ executable day-12
                       split ^>=0.2.3.5,
                       unordered-containers ^>=0.2.19.1,
                       vector ^>=0.13.0.0,
+
+executable day-13
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day13.hs
+
+    build-depends:    megaparsec ^>=9.3.0,
