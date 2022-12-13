@@ -22,6 +22,13 @@ main = do
   putStrLn "Part 1:"
   print $! Seq.length <$> findShortestPath input (fromJust $ start input) (fromJust $ goal input)
 
+  putStrLn "\nPart 2:"
+  -- If you compute a map of optimal directions from each a square this can be
+  -- done much more efficiently, but I'll just brute force it
+  let startCandidates = [(x, y) | x <- [0..width input - 1], y <- [0..height input - 1], (input ! (x, y)) <= 1]
+      lengthFrom pos = Seq.length <$> findShortestPath input pos (fromJust $ goal input)
+  print $! minimum . mapMaybe lengthFrom $! startCandidates
+
 -- * Part 1
 
 -- | A height map with a certain width.
