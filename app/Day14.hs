@@ -11,13 +11,14 @@ import Data.Void
 import Text.Megaparsec hiding (parse)
 import qualified Text.Megaparsec as Parsec
 import Text.Megaparsec.Char
+import GHC.Stack (HasCallStack)
 
 main :: IO ()
 main = do
   !input <- parse <$> readFile "inputs/day-14.txt"
 
   putStrLn "Part 1:"
-  print input
+  print $! part1 input
 
 -- * Part 1
 
@@ -29,7 +30,7 @@ type Point = (Int, Int)
 -- so if both corners have the same value then the cave is empty.
 data Cave = Cave {topLeft :: Point, bottomRight :: Point, caveVector :: Vector Tile}
 
-data Tile = Air | Rock | Sand
+data Tile = Air | Rock | Sand deriving (Eq)
 
 instance Show Cave where
   show cave@(Cave _ _ xs) = unlines . chunksOf (width cave) . map fromTile . V.toList $ xs
@@ -42,6 +43,42 @@ instance Show Cave where
 sandStartPos :: Point
 sandStartPos = (500, 0)
 
+-- | Count the number of sand particles that can be dropped into the cave before
+-- a particle falls into the abyss.
+part1 :: Cave -> Int
+part1 cave = go cave 0
+  where
+    go :: Cave -> Int -> Int
+    go cave' n
+      | Just !cave'' <- dropSand cave' = go cave'' (n + 1)
+      | otherwise = n
+
+-- | Drop a single unit of sand into the cave from 'sandStartPos' Sand falls
+-- down, flows downward left when downwards is blocked, flows downward right
+-- when downward left is blocked, and comes to a standstill when all three tiles
+-- below the sand is blocked. Returns @Nothing@ when the sand would fall into
+-- the abyss below the cave.
+dropSand :: Cave -> Maybe Cave
+dropSand cave = (\pos -> cave // [(pos, Sand)]) <$> simulateSand cave sandStartPos
+
+-- | Determine where a sand particle comes to rest when dropped from a certain
+-- point. Returns 'Nothing' if it falls out of bounds into the abyss.
+simulateSand :: Cave -> Point -> Maybe Point
+simulateSand cave pos@(x, y)
+  -- If the next position is out of bounds then the sand will have fallen into the
+  -- abyss
+  | isOutOfBounds cave (x, y + 1) = Nothing
+  -- This could be much more efficient instead of simulating every single step,
+  -- but this looks nice and it's fast enough anyways
+  | (cave ! (x, y + 1)) == Air = simulateSand cave (x, y + 1)
+  | isOutOfBounds cave (x - 1, y + 1) = Nothing
+  | (cave ! (x - 1, y + 1)) == Air = simulateSand cave (x - 1, y + 1)
+  | isOutOfBounds cave (x + 1, y + 1) = Nothing
+  | (cave ! (x + 1, y + 1)) == Air = simulateSand cave (x + 1, y + 1)
+  -- If all three places below the sand particle are solid then the sand comes
+  -- to a standstill
+  | otherwise = Just pos
+
 -- ** Cave matrix combinators
 
 -- | Add a position and a vector. Or two positions. I don't care.
@@ -52,20 +89,26 @@ addPos (x, y) (dx, dy) = (x + dx, y + dy)
 subPos :: Point -> Point -> Point
 subPos (xl, yl) (xr, yr) = (xl - xr, yl - yr)
 
+-- | The width of the cave.
 width :: Cave -> Int
 width (Cave (x1, _) (x2, _) _) = x2 - x1
 
+-- | The height of the cave.
 height :: Cave -> Int
 height (Cave (_, y1) (_, y2) _) = y2 - y1
+
+-- | Whether or not a point would be out of bounds.
+isOutOfBounds :: Cave -> Point -> Bool
+isOutOfBounds (Cave (x1, y1) (x2, y2) _) (x, y) = x < x1 || y < y1 || x >= x2 || y >= y2
 
 -- | Access for a single element. Diverges when the index is out of bounds.
 infixl 4 !
 
-(!) :: Cave -> Point -> Tile
+(!) :: HasCallStack => Cave -> Point -> Tile
 cave@(Cave _ _ xs) ! pos = xs V.! pointToLinear cave pos
 
 -- | Unchecked access for a single element.
-(//) :: Cave -> [(Point, Tile)] -> Cave
+(//) :: HasCallStack => Cave -> [(Point, Tile)] -> Cave
 cave@(Cave tl br xs) // ops = Cave tl br $ xs V.// map (\(pos, tile) -> (pointToLinear cave pos, tile)) ops
 
 -- The point coordinates are in the form of @(500, 0)@, so we'll need to
