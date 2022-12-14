@@ -8,17 +8,20 @@ import Data.List.Split (chunksOf)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Void
+import GHC.Stack (HasCallStack)
 import Text.Megaparsec hiding (parse)
 import qualified Text.Megaparsec as Parsec
 import Text.Megaparsec.Char
-import GHC.Stack (HasCallStack)
 
 main :: IO ()
 main = do
   !input <- parse <$> readFile "inputs/day-14.txt"
 
   putStrLn "Part 1:"
-  print $! part1 input
+  print $! part1 $! caveFromLines input
+
+  putStrLn "Part 2:"
+  print $! part2 $! caveFromLines (addFloorLine input)
 
 -- * Part 1
 
@@ -124,8 +127,8 @@ type Parser = Parsec Void String
 
 type Line = [Point]
 
-parse :: String -> Cave
-parse = caveFromLines . fromRight' . Parsec.parse (sepEndBy pLine eol <* eof) "input"
+parse :: String -> [Line]
+parse = fromRight' . Parsec.parse (sepEndBy pLine eol <* eof) "input"
   where
     fromRight' (Right a) = a
     fromRight' (Left e) = error $ "That's not quite...right ;))))) " <> errorBundlePretty e
@@ -137,9 +140,6 @@ caveFromLines xs = foldl' addLines emptyCave xs
     -- NOTE: This always needs to include (500, 0), so we'll just make sure it does
     topLeft', bottomRight' :: Point
     (topLeft', bottomRight') = foldl' minMaxPos ((maxBound, maxBound), (minBound, minBound)) (sandStartPos : concat xs)
-    -- Note the @+ 1@ here, the bottom right end point is exclusive
-    minMaxPos :: (Point, Point) -> Point -> (Point, Point)
-    minMaxPos ((xmin, ymin), (xmax, ymax)) (x, y) = ((min xmin x, min ymin y), (max xmax (x + 1), max ymax (y + 1)))
 
     w = fst bottomRight' - fst topLeft'
     h = snd bottomRight' - snd topLeft'
@@ -166,6 +166,10 @@ caveFromLines xs = foldl' addLines emptyCave xs
                   else error $ "Invalid line from " <> show (x1, y1) <> " to " <> show (x2, y2)
        in cave // map (,Rock) lineCoords
 
+-- Note the @+ 1@ here, the bottom right end point is exclusive
+minMaxPos :: (Point, Point) -> Point -> (Point, Point)
+minMaxPos ((xmin, ymin), (xmax, ymax)) (x, y) = ((min xmin x, min ymin y), (max xmax (x + 1), max ymax (y + 1)))
+
 pInt :: Parser Int
 pInt = read <$> some digitChar
 
@@ -174,3 +178,32 @@ pLine = sepBy1 pPoint (string " -> ")
 
 pPoint :: Parser Point
 pPoint = (,) <$> (pInt <* char ',') <*> pInt
+
+-- * Part 2
+
+-- | Hack in a floor line so we don't have to modify much else
+addFloorLine :: [Line] -> [Line]
+addFloorLine xs = [(xMin, y), (xMax, y)] : xs
+  where
+    -- The bottom right point is an exclusive end, so the coordinates are one
+    -- higher than the actual bottom right corner of the cave
+    topLeft', bottomRight' :: Point
+    (topLeft', bottomRight') = foldl' minMaxPos ((maxBound, maxBound), (minBound, minBound)) (sandStartPos : concat xs)
+
+    xMin = fst topLeft' - 80
+    xMax = fst bottomRight' + 169
+
+    -- This should be the highest y-coordinate plus two, so that's the bottom
+    -- right coordinate plus one
+    y = snd bottomRight' + 1
+
+-- | Count the number of sand particles that can be dropped into the cave before
+-- a particle overlaps the start position.
+part2 :: Cave -> Int
+part2 cave = go cave 0
+  where
+    go :: Cave -> Int -> Int
+    go cave' n
+      | (cave' ! sandStartPos) == Sand = n
+      | Just !cave'' <- dropSand cave' = go cave'' (n + 1)
+      | otherwise = error $ "The floor wasn't wide enough, hack in additional width in 'addFloorLine':\n" <> show cave'
