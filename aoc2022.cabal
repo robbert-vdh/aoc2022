@@ -117,3 +117,12 @@ executable day-13
     main-is:          Day13.hs
 
     build-depends:    megaparsec ^>=9.3.0,
+
+executable day-14
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day14.hs
+
+    build-depends:    megaparsec ^>=9.3.0,
+                      split ^>=0.2.3.5,
+                      vector ^>=0.13.0.0,
