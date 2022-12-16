@@ -5,6 +5,8 @@ module Main where
 import Control.Monad
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as M
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as S
 import Data.List
 import Data.Maybe
 import Data.Void
@@ -39,41 +41,48 @@ type MaybeDistanceMatrix = HashMap (ValveKey, ValveKey) (Maybe Int)
 -- allotted time. Once we have that, we can simply take the path that results in
 -- in the maximum amount of pressure released at the end of the 30 minutes.
 maximumPressureRelease :: Graph -> Int
-maximumPressureRelease graph = maximum $ mapMaybe pathPressureRelease pathPermutations
+maximumPressureRelease graph = maximum $ map fst pathPermutations
   where
     matrix :: DistanceMatrix
     !matrix = computeDistanceMatrix graph
 
     -- We'll want to visit all of the valves at least once.
-    targets :: [ValveKey]
-    !targets = nub $ map snd (M.keys matrix)
+    targets :: HashSet ValveKey
+    !targets = S.fromList $ map snd (M.keys matrix)
 
-    -- These are all possible paths that visited all valves. We should always
-    -- start at @AA@.
-    pathPermutations :: [[ValveKey]]
-    pathPermutations = map ("AA" :) (permutations targets)
+    -- These are all possible paths that visited all valves, along with the
+    -- total amount of pressure released at that time. We'll always start at
+    -- @AA@.
+    pathPermutations :: [(Int, [ValveKey])]
+    pathPermutations = map (\(x, path) -> (x, "AA" : path)) $ expandPathPermutations "AA" targets 0
 
-    -- If the path can be completed in the 30 minutes, return the total amount
-    -- of pressure released at the end of it. Otherwise this returns @Nothing@.
-    pathPressureRelease :: [ValveKey] -> Maybe Int
-    pathPressureRelease = pathPressureRelease' 0
+    -- These are all possible paths that visit all valves. This considers the
+    -- valves that have already been visited, and the current time. The path is
+    -- pruned when the time limit is up before all valves can be turned on.
+    expandPathPermutations :: ValveKey -> HashSet ValveKey -> Int -> [(Int, [ValveKey])]
+    expandPathPermutations from unvisited currentTime
+      -- If we have visited all paths we can bubble up again and add the
+      -- contributed pressure releases and the valves along the path
+      | S.null unvisited = [(0, [])]
+      | otherwise =
+          concatMap (\to -> expandPathPermutation from to unvisited currentTime) unvisited
 
-    -- pathPressureRelease with a running tally for time so we can stop
-    -- recursing when the path becomes infeasible.
-    pathPressureRelease' :: Int -> [ValveKey] -> Maybe Int
-    -- Empty paths should not occur
-    pathPressureRelease' _ [] = error "Empty path"
-    -- At this point we arrived at the end of the path
-    pathPressureRelease' _ [_] = Just 0
-    pathPressureRelease' currentTime (from : to : valves) =
+    expandPathPermutation :: ValveKey -> ValveKey -> HashSet ValveKey -> Int -> [(Int, [ValveKey])]
+    expandPathPermutation from to unvisited currentTime =
       -- We need to travel to the new valve, and then open it which also takes
       -- one minute.
-      let newTime = currentTime + (matrix M.! (from, to)) + 1
+      let !newTime = currentTime + (matrix M.! (from, to)) + 1
           valve = graph M.! to
-          contributedPressureRelease = flowRate valve * (30 - newTime)
+          !contributedPressureRelease = flowRate valve * (30 - newTime)
+          unvisited' = S.delete to unvisited
        in if newTime > 30
-            then Nothing
-            else (+ contributedPressureRelease) <$> pathPressureRelease' newTime (to : valves)
+            -- For the example case we can reject all longer paths, but with our
+            -- real input we cannot visit all valves
+            then [(0, [])]
+            else
+              map
+                (\(time, path) -> (time + contributedPressureRelease, to : path))
+                $! expandPathPermutations to unvisited' newTime
 
 -- | Compute the distance matrix from a graph. Valves with flow rate 0 are
 -- omitted except for valve AA, and connections from a node to itself is also
