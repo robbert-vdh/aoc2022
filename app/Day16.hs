@@ -17,8 +17,7 @@ main = do
   !input <- parse <$> readFile "inputs/day-16.txt"
 
   putStrLn "Part 1:"
-  -- print $! maximumPressureReleaseDfs input
-  print $! computeDistanceMatrix input
+  print $! maximumPressureRelease input
 
 -- * Part 1
 
@@ -33,21 +32,48 @@ type Graph = HashMap ValveKey Valve
 type DistanceMatrix = HashMap (ValveKey, ValveKey) Int
 type MaybeDistanceMatrix = HashMap (ValveKey, ValveKey) (Maybe Int)
 
--- data SearchState = SearchState
---   { currentPos :: !ValveKey
---   -- ^ The current position in the graph. Starts at AA.
---   , timeRemaining :: {-# UNPACK #-} !Int
---   -- ^ How many time units are remaining. Starts at 30.
---   , openValves :: !(HashSet ValveKey)
---   -- ^ Which valves are already open.
---   , resultingPressureRelease :: {-# UNPACK #-} !Int
---   -- ^ How much pressure would be released at the end of the 30 minutes. Starts
---   -- at 0.
---   }
---   deriving (Show)
+-- | Find the path through the graph with the highest maximum pressure release.
+-- This works by first computing the shortest paths for all pairs of nodes, only
+-- considering valves with non-zero flow. Then based on that we'll find all path
+-- permutations starting at @AA@ that visit and turn on all other valves in the
+-- allotted time. Once we have that, we can simply take the path that results in
+-- in the maximum amount of pressure released at the end of the 30 minutes.
+maximumPressureRelease :: Graph -> Int
+maximumPressureRelease graph = maximum $ mapMaybe pathPressureRelease pathPermutations
+  where
+    matrix :: DistanceMatrix
+    !matrix = computeDistanceMatrix graph
 
--- initialSearchState :: SearchState
--- initialSearchState = SearchState "AA" 30 S.empty 0
+    -- We'll want to visit all of the valves at least once.
+    targets :: [ValveKey]
+    !targets = nub $ map snd (M.keys matrix)
+
+    -- These are all possible paths that visited all valves. We should always
+    -- start at @AA@.
+    pathPermutations :: [[ValveKey]]
+    pathPermutations = map ("AA" :) (permutations targets)
+
+    -- If the path can be completed in the 30 minutes, return the total amount
+    -- of pressure released at the end of it. Otherwise this returns @Nothing@.
+    pathPressureRelease :: [ValveKey] -> Maybe Int
+    pathPressureRelease = pathPressureRelease' 0
+
+    -- pathPressureRelease with a running tally for time so we can stop
+    -- recursing when the path becomes infeasible.
+    pathPressureRelease' :: Int -> [ValveKey] -> Maybe Int
+    -- Empty paths should not occur
+    pathPressureRelease' _ [] = error "Empty path"
+    -- At this point we arrived at the end of the path
+    pathPressureRelease' _ [_] = Just 0
+    pathPressureRelease' currentTime (from : to : valves) =
+      -- We need to travel to the new valve, and then open it which also takes
+      -- one minute.
+      let newTime = currentTime + (matrix M.! (from, to)) + 1
+          valve = graph M.! to
+          contributedPressureRelease = flowRate valve * (30 - newTime)
+       in if newTime > 30
+            then Nothing
+            else (+ contributedPressureRelease) <$> pathPressureRelease' newTime (to : valves)
 
 -- | Compute the distance matrix from a graph. Valves with flow rate 0 are
 -- omitted except for valve AA, and connections from a node to itself is also
@@ -57,9 +83,8 @@ computeDistanceMatrix :: Graph -> DistanceMatrix
 computeDistanceMatrix graph = pruneZeroFlow (computeDistanceMatrix' graph)
   where
     pruneZeroFlow = M.filterWithKey $ \(x, y) _ ->
-      x == "AA"
-        || (flowRate (graph M.! x) > 0 && flowRate (graph M.! y) > 0)
-        || (x == y)
+      (x == "AA" && flowRate (graph M.! y) > 0)
+        || (flowRate (graph M.! x) > 0 && flowRate (graph M.! y) > 0 && x /= y)
 
 -- | 'computeDistanceMatrix', but without pruning uninteresting vertices.
 computeDistanceMatrix' :: Graph -> DistanceMatrix
@@ -105,58 +130,6 @@ computeDistanceMatrix' graph =
               | dThrough < dDirect ->
                   M.insert (from, to) (Just dThrough) matrix
             _ -> matrix
-
--- -- The distance from a node to itself is 0.
--- zeroDistances = M.fromList . map (\k -> ((k, k), 0)) $ M.keys graph
-
--- -- | We'll start simple and just solve this with a depth first search.
--- maximumPressureReleaseDfs :: Graph -> Int
--- maximumPressureReleaseDfs graph = maximumPressureReleaseDfs' graph initialSearchState
-
--- -- | Find the maximum pressure release possible from a given starting search
--- -- state using a depth first search.
--- maximumPressureReleaseDfs' :: Graph -> SearchState -> Int
--- maximumPressureReleaseDfs' graph ss = case possibleActions graph ss of
---   -- If there are no actions remaining then the time is up
---   [] -> resultingPressureRelease ss
---   actions ->
---     let ssResults = map (performAction graph ss) actions
---      in maximum $! map (maximumPressureReleaseDfs' graph) ssResults
-
--- data Action = OpenCurrentValve | MoveTo ValveKey
-
--- -- | Get the possible actions based on the current position, open valves, and
--- -- time remaining. Returns an empty list if there is no time left to perform an
--- -- action.
--- possibleActions :: Graph -> SearchState -> [Action]
--- possibleActions graph ss
---   -- Both actions take exactly one minute
---   | timeRemaining ss < 1 = []
---   | otherwise =
---       let currentValveKey = currentPos ss
---           currentValve = graph M.! currentValveKey
---           moveActions = map MoveTo (connectedTo $ graph M.! currentValveKey)
---        in -- We can of course only open the current valve if it is not already
---           -- open. We'll also preemptively prune blocked valves because why not.
---           if currentValveKey `S.member` openValves ss || flowRate currentValve == 0
---             then moveActions
---             else OpenCurrentValve : moveActions
-
--- -- | Apply the effects of an action returned by 'possibleActions'. This does not
--- -- check whether the action actually makes any sense.
--- performAction :: Graph -> SearchState -> Action -> SearchState
--- performAction graph ss OpenCurrentValve =
---   let currentValveKey = currentPos ss
---       currentValve = graph M.! currentValveKey
---       timeRemaining' = timeRemaining ss - 1
---    in ss
---         { -- The valve only opens after the minute has passed, so this should use
---           -- the new flow rate
---           resultingPressureRelease = resultingPressureRelease ss + (flowRate currentValve * timeRemaining')
---         , openValves = currentValveKey `S.insert` openValves ss
---         , timeRemaining = timeRemaining'
---         }
--- performAction _ ss (MoveTo to) = ss {currentPos = to, timeRemaining = timeRemaining ss - 1}
 
 -- ** Parsing
 
