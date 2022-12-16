@@ -9,6 +9,7 @@ import Data.HashSet (HashSet)
 import qualified Data.HashSet as S
 import Data.List
 import Data.Maybe
+import Data.Ord
 import Data.Void
 import Text.Megaparsec hiding (parse)
 import qualified Text.Megaparsec as Parsec
@@ -20,6 +21,9 @@ main = do
 
   putStrLn "Part 1:"
   print $! maximumPressureRelease input
+
+  putStrLn "\nPart 2: (may not yield the correct result for all inputs, see the note)"
+  print $! maximumElephantPoweredPressureRelease input
 
 -- * Part 1
 
@@ -50,9 +54,10 @@ maximumPressureRelease graph = maximum $ map fst pathPermutations
     targets :: HashSet ValveKey
     !targets = S.fromList $ map snd (M.keys matrix)
 
-    -- These are all possible paths that visited all valves, along with the
-    -- total amount of pressure released at that time. We'll always start at
-    -- @AA@.
+    -- These are all possible paths, along with the total amount of pressure
+    -- released at the end of the 30 minutes. Since we cannot visit every
+    -- possible valve with the real input, this also includes incomplete paths.
+    -- We'll always start at @AA@.
     pathPermutations :: [(Int, [ValveKey])]
     pathPermutations =
       map (\(x, path) -> (x, "AA" : path)) $
@@ -177,3 +182,42 @@ pValveKV = (,) <$> (string "Valve " *> pValveKey) <*> pValve
                 *> (string "s lead to valves " <|> string " leads to valve ")
                 *> sepBy1 pValveKey (string ", ")
             )
+
+-- * Part 2
+
+-- | This is the same as 'maximumElephantPoweredPressureRelease', but with a 26
+-- minute time limit, and after finding a path we'll find a second path that
+-- doesn't revisit any nodes and sum the scores.
+maximumElephantPoweredPressureRelease :: Graph -> Int
+maximumElephantPoweredPressureRelease graph = maximum $ map (\(x, _, _) -> x) pathPermutations
+  where
+    matrix :: DistanceMatrix
+    !matrix = computeDistanceMatrix graph
+
+    -- We'll want to visit all of the valves at least once.
+    targets :: HashSet ValveKey
+    !targets = S.fromList $ map snd (M.keys matrix)
+
+    -- These are all possible combinations of paths where we and the elephant
+    -- both visit different valves, along with the total amount of pressure
+    -- released at the end of the 30 (or well 26) minutes. We'll always start at
+    -- @AA@.
+    pathPermutations :: [(Int, [ValveKey], [ValveKey])]
+    pathPermutations =
+      let ourPaths = expandPathPermutations (graph, matrix, 26) "AA" targets 0
+          -- HACK: I couldn't be bothered to reengineer this so part 2 can be
+          --       faster, so we'll just brute force it by limiting the search
+          --       space to only consider the best paths
+          yolo = take 10 $ sortOn (Down . fst) ourPaths
+          -- The elephant will visit the nodes we haven't already visited
+          augmentedPaths = concatMap (uncurry elephantPermutations) yolo
+       in map (\(x, ourPath, elePhath) -> (x, "AA" : ourPath, "AA" : elePhath)) augmentedPaths
+
+    -- Compute an addition set of paths that doesn't overlap with any of the
+    -- valves from @ourPath@.
+    elephantPermutations :: Int -> [ValveKey] -> [(Int, [ValveKey], [ValveKey])]
+    elephantPermutations ourPressureReleased ourPath =
+      -- The nodes that have already been visited by us shouldn't be visited by the elephant
+      let availableTargets = S.difference targets (S.fromList ourPath)
+          elePhaths = expandPathPermutations (graph, matrix, 26) "AA" availableTargets 0
+       in map (\(x, elePhath) -> (ourPressureReleased + x, ourPath, elePhath)) elePhaths
