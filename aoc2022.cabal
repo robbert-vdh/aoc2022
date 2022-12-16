@@ -133,3 +133,12 @@ executable day-15
     main-is:          Day15.hs
 
     build-depends:    megaparsec ^>=9.3.0,
+
+executable day-16
+    import:           base
+    hs-source-dirs:   app
+    main-is:          Day16.hs
+
+    build-depends:    megaparsec ^>=9.3.0,
+                      containers ^>=0.6.6,
+                      unordered-containers ^>=0.2.19.1,
