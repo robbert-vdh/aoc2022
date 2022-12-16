@@ -54,35 +54,44 @@ maximumPressureRelease graph = maximum $ map fst pathPermutations
     -- total amount of pressure released at that time. We'll always start at
     -- @AA@.
     pathPermutations :: [(Int, [ValveKey])]
-    pathPermutations = map (\(x, path) -> (x, "AA" : path)) $ expandPathPermutations "AA" targets 0
+    pathPermutations =
+      map (\(x, path) -> (x, "AA" : path)) $
+        expandPathPermutations (graph, matrix, 30) "AA" targets 0
 
-    -- These are all possible paths that visit all valves. This considers the
-    -- valves that have already been visited, and the current time. The path is
-    -- pruned when the time limit is up before all valves can be turned on.
-    expandPathPermutations :: ValveKey -> HashSet ValveKey -> Int -> [(Int, [ValveKey])]
-    expandPathPermutations from unvisited currentTime
-      -- If we have visited all paths we can bubble up again and add the
-      -- contributed pressure releases and the valves along the path
-      | S.null unvisited = [(0, [])]
-      | otherwise =
-          concatMap (\to -> expandPathPermutation from to unvisited currentTime) unvisited
+-- | The graph, distance matrix, and maximum allotted time to solve the problem.
+type SolverParams = (Graph, DistanceMatrix, Int)
 
-    expandPathPermutation :: ValveKey -> ValveKey -> HashSet ValveKey -> Int -> [(Int, [ValveKey])]
-    expandPathPermutation from to unvisited currentTime =
+-- | These are all possible paths that visit all valves. This considers the
+-- valves that have already been visited, and the current time. The path is
+-- pruned when the time limit is up before all valves can be turned on.
+--
+-- This was previously defined in the where clause of 'maximumPressureRelease'
+-- but we need a modified version for part 2, hence the pretty intense function
+-- signature.
+expandPathPermutations :: SolverParams -> ValveKey -> HashSet ValveKey -> Int -> [(Int, [ValveKey])]
+expandPathPermutations params@(graph, matrix, maximumTime) from unvisited currentTime
+  -- If we have visited all paths we can bubble up again and add the
+  -- contributed pressure releases and the valves along the path
+  | S.null unvisited = [(0, [])]
+  | otherwise =
+      concatMap expandPathPermutation unvisited
+  where
+    expandPathPermutation :: ValveKey -> [(Int, [ValveKey])]
+    expandPathPermutation to =
       -- We need to travel to the new valve, and then open it which also takes
       -- one minute.
       let !newTime = currentTime + (matrix M.! (from, to)) + 1
           valve = graph M.! to
-          !contributedPressureRelease = flowRate valve * (30 - newTime)
+          !contributedPressureRelease = flowRate valve * (maximumTime - newTime)
           unvisited' = S.delete to unvisited
-       in if newTime > 30
-            -- For the example case we can reject all longer paths, but with our
+       in if newTime > maximumTime
+            then -- For the example case we can reject all longer paths, but with our
             -- real input we cannot visit all valves
-            then [(0, [])]
+              [(0, [])]
             else
               map
                 (\(time, path) -> (time + contributedPressureRelease, to : path))
-                $! expandPathPermutations to unvisited' newTime
+                $! expandPathPermutations params to unvisited' newTime
 
 -- | Compute the distance matrix from a graph. Valves with flow rate 0 are
 -- omitted except for valve AA, and connections from a node to itself is also
